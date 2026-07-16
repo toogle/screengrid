@@ -1,0 +1,46 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: swift test
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run tests
+        run: swift test --enable-code-coverage
+
+      - name: Report coverage
+        run: |
+          BIN=$(swift build --show-bin-path)
+          TESTS_BIN="$BIN/ScreenGridPackageTests.xctest/Contents/MacOS/ScreenGridPackageTests"
+          PROFDATA="$BIN/codecov/default.profdata"
+          {
+            echo "## Test coverage"
+            echo '```'
+            xcrun llvm-cov report "$TESTS_BIN" \
+              -instr-profile "$PROFDATA" \
+              -ignore-filename-regex '(Tests|\.build)/'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          xcrun llvm-cov export "$TESTS_BIN" \
+            -instr-profile "$PROFDATA" \
+            -ignore-filename-regex '(Tests|\.build)/' \
+            -format lcov > coverage.lcov
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage.lcov
+          path: coverage.lcov
+          if-no-files-found: error
